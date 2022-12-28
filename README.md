@@ -8,14 +8,12 @@ It will add said file directory to the PATH.
 ## Example Usage
 
 ```yml
-- name: Add VC++ to PATH
+- name: Add VS bundled clang-tidy to PATH
   uses: Lectem/vswhere@v1.0
-  with: { file: 'Common7\Tools\VsDevCmd.bat' }
+  with: { file: 'VC\Tools\Llvm\bin\clang-tidy.exe' }
 
 - name: Build app for release
-  run: |
-    VsDevCmd.bat -arch=x64 -host_arch=x64
-    CL.exe
+  run: clang-tidy --version
 ```
 
 ## The `file` parameter
@@ -33,10 +31,10 @@ There are a few additional parameters that can be set if you need them. These ar
 You may have a situation where your Actions runner has multiple versions of Visual Studio and you need to find a specific version of the tool.  Simply add the `vs-version` input to specify the range of versions to find.  If looking for a specific version, specify the minimum and maximum versions as shown in the example below, which will look for just 16.4.
 
 ```yml
-- name: Add VC++ to PATH
+- name: Add VS bundled clang-tidy to PATH
   uses: Lectem/vswhere@v1.0
   with:
-    file: 'Common7\Tools\VsDevCmd.bat'
+    file: 'VC\Tools\Llvm\bin\clang-tidy.exe'
     vs-version: '[16.4,16.5)'
 ```
 
