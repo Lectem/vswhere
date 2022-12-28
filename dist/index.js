@@ -1648,18 +1648,29 @@ const exec = __importStar(__webpack_require__(986));
 const fs = __importStar(__webpack_require__(747));
 const path = __importStar(__webpack_require__(622));
 const io = __importStar(__webpack_require__(1));
+const FILE = core.getInput('file', { required: true });
 const IS_WINDOWS = process.platform === 'win32';
 const VS_VERSION = core.getInput('vs-version') || 'latest';
 const VSWHERE_PATH = core.getInput('vswhere-path');
 const ALLOW_PRERELEASE = core.getInput('vs-prerelease') || 'false';
-let MSBUILD_ARCH = core.getInput('msbuild-architecture') || 'x86';
+const REQUIRES = core.getInput('requires') || '';
+const REQUIRES_ANY = core.getInput('requires-any') || 'false';
 // if a specific version of VS is requested
-let VSWHERE_EXEC = '-products * -requires Microsoft.Component.MSBuild -property installationPath -latest ';
-if (ALLOW_PRERELEASE === 'true') {
-    VSWHERE_EXEC += ' -prerelease ';
+let VSWHERE_EXEC = `-products * -find ${FILE}`;
+if (REQUIRES !== '') {
+    VSWHERE_EXEC += ` -requires ${REQUIRES}`;
+    if (REQUIRES_ANY) {
+        VSWHERE_EXEC += '-requiresAny ';
+    }
 }
-if (VS_VERSION !== 'latest') {
-    VSWHERE_EXEC += `-version "${VS_VERSION}" `;
+if (ALLOW_PRERELEASE === 'true') {
+    VSWHERE_EXEC += ' -prerelease';
+}
+if (VS_VERSION === 'latest') {
+    VSWHERE_EXEC += ` -latest`;
+}
+else {
+    VSWHERE_EXEC += ` -version "${VS_VERSION}"`;
 }
 core.debug(`Execution arguments: ${VSWHERE_EXEC}`);
 function run() {
@@ -1691,56 +1702,33 @@ function run() {
                 }
             }
             if (!fs.existsSync(vswhereToolExe)) {
-                core.setFailed('setup-msbuild requires the path to where vswhere.exe exists');
+                core.setFailed('Lectem/vswhere requires the path to where vswhere.exe exists');
                 return;
             }
             core.debug(`Full tool exe: ${vswhereToolExe}`);
-            let foundToolPath = '';
+            let foundFileDir = '';
             const options = {};
             options.listeners = {
                 stdout: (data) => {
-                    const installationPath = data.toString().trim();
-                    core.debug(`Found installation path: ${installationPath}`);
-                    // x64 and arm64 only exist in one possible location, so no fallback probing
-                    if (MSBUILD_ARCH === 'x64' || MSBUILD_ARCH === 'arm64') {
-                        // x64 is actually amd64 so change to that
-                        if (MSBUILD_ARCH === 'x64') {
-                            MSBUILD_ARCH = 'amd64';
-                        }
-                        let toolPath = path.join(installationPath, `MSBuild\\Current\\Bin\\${MSBUILD_ARCH}\\MSBuild.exe`);
-                        core.debug(`Checking for path: ${toolPath}`);
-                        if (!fs.existsSync(toolPath)) {
-                            return;
-                        }
-                        foundToolPath = toolPath;
-                    }
-                    else {
-                        let toolPath = path.join(installationPath, 'MSBuild\\Current\\Bin\\MSBuild.exe');
-                        core.debug(`Checking for path: ${toolPath}`);
-                        if (!fs.existsSync(toolPath)) {
-                            toolPath = path.join(installationPath, 'MSBuild\\15.0\\Bin\\MSBuild.exe');
-                            core.debug(`Checking for path: ${toolPath}`);
-                            if (!fs.existsSync(toolPath)) {
-                                return;
-                            }
-                        }
-                        foundToolPath = toolPath;
+                    const vswhereoutput = data.toString().trim();
+                    const fileDir = path.parse(vswhereoutput).dir;
+                    if (fs.existsSync(fileDir)) {
+                        core.debug(`Found file installation path: ${fileDir}`);
+                        foundFileDir = fileDir;
                     }
                 }
             };
             // execute the find putting the result of the command in the options foundToolPath
             yield exec.exec(`"${vswhereToolExe}" ${VSWHERE_EXEC}`, [], options);
-            if (!foundToolPath) {
-                core.setFailed('Unable to find MSBuild.');
+            if (!foundFileDir) {
+                core.setFailed(`Unable to find ${FILE}.`);
                 return;
             }
-            // extract the folder location for the tool
-            const toolFolderPath = path.dirname(foundToolPath);
             // set the outputs for the action to the folder path of msbuild
-            core.setOutput('msbuildPath', toolFolderPath);
+            core.setOutput('filePath', foundFileDir);
             // add tool path to PATH
-            core.addPath(toolFolderPath);
-            core.debug(`Tool path added to PATH: ${toolFolderPath}`);
+            core.addPath(foundFileDir);
+            core.debug(`Tool path added to PATH: ${foundFileDir}`);
         }
         catch (error) {
             core.setFailed(error.message);

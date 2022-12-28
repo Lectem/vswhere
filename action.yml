@@ -1,10 +1,18 @@
-name: 'setup-msbuild'
-description: 'Helps set up MSBuild into PATH for later usage.'
-author: 'Microsoft'
+name: 'vswhere'
+description: 'Helps to find files from Visual Studio installations.'
+author: 'Lectem'
 branding:
   color: purple
   icon: terminal
 inputs:
+  file:
+    required: true
+    description: | 
+      'The action will add ot the path the directory containing the matching file under the installation path.'
+      'Will look recursively through folders.'
+      '`?``  Matches any one character except `\`'
+      '`*``  Matches zero or more characters except `\`'
+      '`**` Searches the current directory and subdirectories for the remaining search pattern'
   vswhere-path:
     required: false
     description: 'Folder location of where vswhere.exe is located if a self-hosted agent'
@@ -14,13 +22,15 @@ inputs:
   vs-prerelease:
     description: 'Enable searching for pre-release versions of Visual Studio/MSBuild'
     required: false
-  msbuild-architecture:
-    description: 'The preferred processor architecture of MSBuild. Can be either "x86" or "x64". "x64" is only available from Visual Studio version 17.0 and later.'
+  requires:
+    description: 'Specifies the required Visual Studio components. It expects a string containing the list of components seperated by spaces. See https://aka.ms/vs/workloads for a list of workload and component IDs.'
     required: false
-    default: 'x86'
+  requires-any:
+    description: 'Find instances with any one or more workload or components IDs passed to -requires.'
+    required: false
 outputs:
-  msbuildPath:
-    description: 'The resulting location of msbuild for your inputs'
+  filePath:
+    description: 'The resulting location of the file for your inputs'
 
 runs:
   using: 'node16'
