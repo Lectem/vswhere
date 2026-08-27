@@ -28,10 +28,17 @@ inputs:
   requires-any:
     description: 'Find instances with any one or more workload or components IDs passed to -requires.'
     required: false
+  architecture:
+    description: |
+      'Which copy to use when the pattern matches several architectures: host, any, x86, x64, arm or arm64.'
+      'Defaults to host, which only considers files this runner can execute.'
+      'Set it to any to disable the check entirely.'
+    required: false
+    default: 'host'
 outputs:
   filePath:
     description: 'The resulting location of the file for your inputs'
 
 runs:
-  using: 'node16'
+  using: 'node24'
   main: 'dist/index.js'

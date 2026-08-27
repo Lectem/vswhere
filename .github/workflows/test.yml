@@ -1,69 +1,155 @@
-name: "build-test-dev"
+name: "build-test"
 on:
   pull_request:
-    branches:
-      - dev
     paths-ignore:
       - '*.md'
   push:
     branches:
-      - dev
+      - main
     paths-ignore:
       - '*.md'
   workflow_dispatch:
-    branches:
-      - dev
-      - arm64
-      - master
-    paths-ignore:
-      - '*.md'
-  
 
 jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        # windows-2022 ships VS 2022, windows-2025 ships VS 2022 too,
+        # windows-2025-vs2026 is the image the action started failing on
+        os: [windows-2022, windows-2025, windows-2025-vs2026]
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v4
+
+    # what the installation actually looks like, so a layout change between
+    # Visual Studio versions can be told apart from a bug in the action
+    - name: Dump Visual Studio layout
+      shell: pwsh
+      run: |
+        $vswhere = 'C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe'
+        & $vswhere -products * -latest -property installationPath
+        & $vswhere -products * -latest -property installationVersion
+        Write-Host '--- clang-tidy ---'
+        & $vswhere -products * -latest -find '**\clang-tidy.exe'
+        Write-Host '--- msbuild ---'
+        & $vswhere -products * -latest -find '**\MSBuild.exe'
+
+    - name: Find clang-tidy (wildcard)
+      id: wildcard
+      uses: ./
+      with:
+        file: '**\clang-tidy.exe'
+
+    - name: Run clang-tidy
+      run: |
+        echo "filePath: ${{ steps.wildcard.outputs.filePath }}"
+        clang-tidy --version
+
+    - name: Find MSBuild (vswhere-path)
+      uses: ./
+      with:
+        file: '**\Bin\MSBuild.exe'
+        vswhere-path: C:\ProgramData\chocolatey\bin
+
+    - name: Run MSBuild
+      run: msbuild -version
+
+    - name: Find clang-tidy (requires)
+      uses: ./
+      with:
+        file: '**\clang-tidy.exe'
+        requires: 'Microsoft.VisualStudio.Workload.NativeDesktop'
+
+    - name: Find clang-tidy (requires-any)
+      uses: ./
+      with:
+        file: '**\clang-tidy.exe'
+        requires: 'Microsoft.VisualStudio.Workload.NativeDesktop Microsoft.VisualStudio.Component.NotAThing'
+        requires-any: true
+
+    # the compilers are stored per host and per target architecture
+    - name: Find the x86 hosted compiler
+      id: x86
+      uses: ./
+      with:
+        file: '**\cl.exe'
+        architecture: 'x86'
+
+    - name: Check the x86 hosted compiler was picked
+      shell: pwsh
+      run: |
+        $found = '${{ steps.x86.outputs.filePath }}'
+        if ($found -notmatch 'Hostx86') { throw "expected an x86 hosted compiler, got $found" }
+        cl.exe /? 2>&1 | Select-Object -First 1
+
+    # the runner cannot execute this one, the action must refuse it rather
+    # than put it in the PATH
+    - name: Find a tool built for another architecture
+      id: foreign
+      continue-on-error: true
+      uses: ./
+      with:
+        file: '**\Llvm\ARM64\bin\clang-tidy.exe'
+
+    - name: Check the foreign architecture was refused
+      if: matrix.os != 'windows-11-arm'
+      shell: pwsh
+      run: |
+        if ('${{ steps.foreign.outcome }}' -ne 'failure') {
+          throw 'expected the action to refuse a binary the runner cannot execute'
+        }
+
+    # the action must fail, and say where it looked
+    - name: Find a file that does not exist
+      id: missing
+      continue-on-error: true
+      uses: ./
+      with:
+        file: '**\definitely-not-installed.exe'
+
+    - name: Check missing file failed
+      shell: pwsh
+      run: |
+        if ('${{ steps.missing.outcome }}' -ne 'failure') {
+          throw 'expected the action to fail for a file that does not exist'
+        }
+
+    # no instance can match, which is a different failure
+    - name: Require a component that does not exist
+      id: nocomponent
+      continue-on-error: true
+      uses: ./
+      with:
+        file: '**\clang-tidy.exe'
+        requires: 'Microsoft.VisualStudio.Component.NotAThing'
+
+    - name: Check missing component failed
+      shell: pwsh
+      run: |
+        if ('${{ steps.nocomponent.outcome }}' -ne 'failure') {
+          throw 'expected the action to fail when no instance matches'
+        }
+
   build:
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v2
-
-    - name: Setup MSBuild (vswhere-path)
-      id: setup_msbuild_explicit
-      uses: ./
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
       with:
-        vswhere-path: C:\ProgramData\chocolatey\bin
+        node-version: 20
 
-    - name: Setup MSBuild (PATH)
-      id: setup_msbuild_path
-      uses: ./
-
-    - name: Setup MSBuild (fallback)
-      id: setup_msbuild_fallback
-      uses: ./
+    - run: npm ci
+    - run: npm run build
+    - run: npm run format-check
+    - run: npm run lint
+    - run: npm run pack
       env:
-        PATH: ''
+        NODE_OPTIONS: --openssl-legacy-provider
 
-    - name: Setup MSBuild (x64)
-      if: always()
-      id: setup_msbuild_path_x64
-      uses: ./
-      with:
-        vs-prerelease: true
-        msbuild-architecture: 'x64'
-
-    - name: Setup MSBuild (arm64)
-      if: always()
-      id: setup_msbuild_path_arm
-      uses: ./
-      with:
-        vs-prerelease: true
-        msbuild-architecture: 'arm64'
-
-    - name: echo msbuild path
+    # dist/index.js is what actually runs, it must match the sources
+    - name: Check dist is up to date
+      shell: pwsh
       run: |
-        echo "vswhere-path: ${{ steps.setup_msbuild_explicit.outputs.msbuildPath }}"
-        echo "PATH: ${{ steps.setup_msbuild_path.outputs.msbuildPath }}"
-        echo "ARM PATH: ${{ steps.setup_msbuild_path_arm.outputs.msbuildPath }}"
-        echo "ARM PATH: ${{ steps.setup_msbuild_path_x64.outputs.msbuildPath }}"
-        echo "Fallback: ${{ steps.setup_msbuild_fallback.outputs.msbuildPath }}"
-
-    - name: echo MSBuild
-      run: msbuild -version
+        git diff --exit-code -- dist/
+        if ($LASTEXITCODE -ne 0) { throw 'dist/ is out of date, run npm run build && npm run pack' }
