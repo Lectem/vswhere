@@ -3,9 +3,8 @@ on:
   pull_request:
     paths-ignore:
       - '*.md'
+  # every branch, the action can only really be tested on a runner
   push:
-    branches:
-      - main
     paths-ignore:
       - '*.md'
   workflow_dispatch:
