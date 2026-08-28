@@ -3,13 +3,14 @@
 This action will help finding any file installed in Visual Studio. This is based on the [setup-msbuild](https://github.com/microsoft/setup-msbuild) action.
 It will add said file directory to the PATH.
 
-> Note: This is HIGHLY UNTESTED. USE AT YOUR OWN RISK
+> Note: tested on the `windows-2022`, `windows-2025` and `windows-2025-vs2026`
+> runner images, see [the workflow](.github/workflows/test.yml).
 
 ## Example Usage
 
 ```yml
 - name: Add VS bundled clang-tidy to PATH
-  uses: Lectem/vswhere@v1.0
+  uses: Lectem/vswhere@v1
   with: { file: '**\clang-tidy.exe' }
 
 - name: Build app for release
@@ -81,9 +82,9 @@ You may have a situation where your Actions runner has multiple versions of Visu
 
 ```yml
 - name: Add VS bundled clang-tidy to PATH
-  uses: Lectem/vswhere@v1.0
+  uses: Lectem/vswhere@v1
   with:
-    file: 'VC\Tools\Llvm\bin\clang-tidy.exe'
+    file: '**\clang-tidy.exe'
     vs-version: '[16.4,16.5)'
 ```
 
